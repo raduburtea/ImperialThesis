@@ -1,0 +1,348 @@
+    1: from enum import Enum
+       
+    1: from rllab.misc.tabulate import tabulate
+    1: from rllab.misc.console import mkdir_p, colorize
+    1: from rllab.misc.autoargs import get_all_parameters
+    1: from contextlib import contextmanager
+    1: import numpy as np
+    1: import os
+    1: import os.path as osp
+    1: import sys
+    1: import datetime
+    1: import dateutil.tz
+    1: import csv
+    1: import joblib
+    1: import json
+    1: import pickle
+    1: import base64
+       
+    1: _prefixes = []
+    1: _prefix_str = ''
+       
+    1: _tabular_prefixes = []
+    1: _tabular_prefix_str = ''
+       
+    1: _tabular = []
+       
+    1: _text_outputs = []
+    1: _tabular_outputs = []
+       
+    1: _text_fds = {}
+    1: _tabular_fds = {}
+    1: _tabular_header_written = set()
+       
+    1: _snapshot_dir = None
+    1: _snapshot_mode = 'all'
+    1: _snapshot_gap = 1
+       
+    1: _log_tabular_only = False
+    1: _header_printed = False
+       
+       
+    1: def _add_output(file_name, arr, fds, mode='a'):
+           if file_name not in arr:
+               mkdir_p(os.path.dirname(file_name))
+               arr.append(file_name)
+               fds[file_name] = open(file_name, mode)
+       
+       
+    1: def _remove_output(file_name, arr, fds):
+           if file_name in arr:
+               fds[file_name].close()
+               del fds[file_name]
+               arr.remove(file_name)
+       
+       
+    1: def push_prefix(prefix):
+    2:     _prefixes.append(prefix)
+           global _prefix_str
+    2:     _prefix_str = ''.join(_prefixes)
+       
+       
+    1: def add_text_output(file_name):
+           _add_output(file_name, _text_outputs, _text_fds, mode='a')
+       
+       
+    1: def remove_text_output(file_name):
+           _remove_output(file_name, _text_outputs, _text_fds)
+       
+       
+    1: def add_tabular_output(file_name):
+           _add_output(file_name, _tabular_outputs, _tabular_fds, mode='w')
+       
+       
+    1: def remove_tabular_output(file_name):
+           if _tabular_fds[file_name] in _tabular_header_written:
+               _tabular_header_written.remove(_tabular_fds[file_name])
+           _remove_output(file_name, _tabular_outputs, _tabular_fds)
+       
+       
+    1: def set_snapshot_dir(dir_name):
+           global _snapshot_dir
+           _snapshot_dir = dir_name
+       
+       
+    1: def get_snapshot_dir():
+           return _snapshot_dir
+       
+       
+    1: def get_snapshot_mode():
+           return _snapshot_mode
+       
+       
+    1: def set_snapshot_mode(mode):
+           global _snapshot_mode
+           _snapshot_mode = mode
+       
+    1: def get_snapshot_gap():
+           return _snapshot_gap
+       
+    1: def set_snapshot_gap(gap):
+           global _snapshot_gap
+           _snapshot_gap = gap
+       
+    1: def set_log_tabular_only(log_tabular_only):
+           global _log_tabular_only
+           _log_tabular_only = log_tabular_only
+       
+       
+    1: def get_log_tabular_only():
+ 5002:     return _log_tabular_only
+       
+       
+    1: def log(s, with_prefix=True, with_timestamp=True, color=None):
+  206:     out = s
+  206:     if with_prefix:
+   74:         out = _prefix_str + out
+  206:     if with_timestamp:
+  206:         now = datetime.datetime.now(dateutil.tz.tzlocal())
+  206:         timestamp = now.strftime('%Y-%m-%d %H:%M:%S.%f %Z')
+  206:         out = "%s | %s" % (timestamp, out)
+  206:     if color is not None:
+               out = colorize(out, color)
+  206:     if not _log_tabular_only:
+               # Also log to stdout
+  206:         print(out)
+  206:         for fd in list(_text_fds.values()):
+                   fd.write(out + '\n')
+                   fd.flush()
+  206:         sys.stdout.flush()
+       
+       
+    1: def record_tabular(key, val):
+  128:     _tabular.append((_tabular_prefix_str + str(key), str(val)))
+       
+       
+    1: def push_tabular_prefix(key):
+           _tabular_prefixes.append(key)
+           global _tabular_prefix_str
+           _tabular_prefix_str = ''.join(_tabular_prefixes)
+       
+       
+    1: def pop_tabular_prefix():
+           del _tabular_prefixes[-1]
+           global _tabular_prefix_str
+           _tabular_prefix_str = ''.join(_tabular_prefixes)
+       
+       
+    1: @contextmanager
+    1: def prefix(key):
+    2:     push_prefix(key)
+    2:     try:
+    2:         yield
+           finally:
+    2:         pop_prefix()
+       
+       
+    1: @contextmanager
+    1: def tabular_prefix(key):
+           push_tabular_prefix(key)
+           yield
+           pop_tabular_prefix()
+       
+       
+    2: class TerminalTablePrinter(object):
+    1:     def __init__(self):
+    1:         self.headers = None
+    1:         self.tabulars = []
+       
+    1:     def print_tabular(self, new_tabular):
+               if self.headers is None:
+                   self.headers = [x[0] for x in new_tabular]
+               else:
+                   assert len(self.headers) == len(new_tabular)
+               self.tabulars.append([x[1] for x in new_tabular])
+               self.refresh()
+       
+    1:     def refresh(self):
+               import os
+               rows, columns = os.popen('stty size', 'r').read().split()
+               tabulars = self.tabulars[-(int(rows) - 3):]
+               sys.stdout.write("\x1b[2J\x1b[H")
+               sys.stdout.write(tabulate(tabulars, self.headers))
+               sys.stdout.write("\n")
+       
+       
+    1: table_printer = TerminalTablePrinter()
+       
+       
+    1: def dump_tabular(*args, **kwargs):
+    2:     wh = kwargs.pop("write_header", None)
+    2:     if len(_tabular) > 0:
+    2:         if _log_tabular_only:
+                   table_printer.print_tabular(_tabular)
+               else:
+  134:             for line in tabulate(_tabular).split('\n'):
+  132:                 log(line, *args, **kwargs)
+    2:         tabular_dict = dict(_tabular)
+               # Also write to the csv files
+               # This assumes that the keys in each iteration won't change!
+    2:         for tabular_fd in list(_tabular_fds.values()):
+                   writer = csv.DictWriter(tabular_fd, fieldnames=list(tabular_dict.keys()))
+                   if wh or (wh is None and tabular_fd not in _tabular_header_written):
+                       writer.writeheader()
+                       _tabular_header_written.add(tabular_fd)
+                   writer.writerow(tabular_dict)
+                   tabular_fd.flush()
+    2:         del _tabular[:]
+       
+       
+    1: def pop_prefix():
+    2:     del _prefixes[-1]
+           global _prefix_str
+    2:     _prefix_str = ''.join(_prefixes)
+       
+       
+    1: def save_itr_params(itr, params):
+    2:     if _snapshot_dir:
+               if _snapshot_mode == 'all':
+                   file_name = osp.join(_snapshot_dir, 'itr_%d.pkl' % itr)
+                   joblib.dump(params, file_name, compress=3)
+               elif _snapshot_mode == 'last':
+                   # override previous params
+                   file_name = osp.join(_snapshot_dir, 'params.pkl')
+                   joblib.dump(params, file_name, compress=3)
+               elif _snapshot_mode == "gap":
+                   if itr % _snapshot_gap == 0:
+                       file_name = osp.join(_snapshot_dir, 'itr_%d.pkl' % itr)
+                       joblib.dump(params, file_name, compress=3)
+               elif _snapshot_mode == 'none':
+                   pass
+               else:
+                   raise NotImplementedError
+       
+       
+    1: def log_parameters(log_file, args, classes):
+           log_params = {}
+           for param_name, param_value in args.__dict__.items():
+               if any([param_name.startswith(x) for x in list(classes.keys())]):
+                   continue
+               log_params[param_name] = param_value
+           for name, cls in classes.items():
+               if isinstance(cls, type):
+                   params = get_all_parameters(cls, args)
+                   params["_name"] = getattr(args, name)
+                   log_params[name] = params
+               else:
+                   log_params[name] = getattr(cls, "__kwargs", dict())
+                   log_params[name]["_name"] = cls.__module__ + "." + cls.__class__.__name__
+           mkdir_p(os.path.dirname(log_file))
+           with open(log_file, "w") as f:
+               json.dump(log_params, f, indent=2, sort_keys=True)
+       
+       
+    1: def stub_to_json(stub_sth):
+           from rllab.misc import instrument
+           if isinstance(stub_sth, instrument.StubObject):
+               assert len(stub_sth.args) == 0
+               data = dict()
+               for k, v in stub_sth.kwargs.items():
+                   data[k] = stub_to_json(v)
+               data["_name"] = stub_sth.proxy_class.__module__ + "." + stub_sth.proxy_class.__name__
+               return data
+           elif isinstance(stub_sth, instrument.StubAttr):
+               return dict(
+                   obj=stub_to_json(stub_sth.obj),
+                   attr=stub_to_json(stub_sth.attr_name)
+               )
+           elif isinstance(stub_sth, instrument.StubMethodCall):
+               return dict(
+                   obj=stub_to_json(stub_sth.obj),
+                   method_name=stub_to_json(stub_sth.method_name),
+                   args=stub_to_json(stub_sth.args),
+                   kwargs=stub_to_json(stub_sth.kwargs),
+               )
+           elif isinstance(stub_sth, instrument.BinaryOp):
+               return "binary_op"
+           elif isinstance(stub_sth, instrument.StubClass):
+               return stub_sth.proxy_class.__module__ + "." + stub_sth.proxy_class.__name__
+           elif isinstance(stub_sth, dict):
+               return {stub_to_json(k): stub_to_json(v) for k, v in stub_sth.items()}
+           elif isinstance(stub_sth, (list, tuple)):
+               return list(map(stub_to_json, stub_sth))
+           elif type(stub_sth) == type(lambda: None):
+               if stub_sth.__module__ is not None:
+                   return stub_sth.__module__ + "." + stub_sth.__name__
+               return stub_sth.__name__
+           elif "theano" in str(type(stub_sth)):
+               return repr(stub_sth)
+           return stub_sth
+       
+       
+    2: class MyEncoder(json.JSONEncoder):
+    1:     def default(self, o):
+               if isinstance(o, type):
+                   return {'$class': o.__module__ + "." + o.__name__}
+               elif isinstance(o, Enum):
+                   return {'$enum': o.__module__ + "." + o.__class__.__name__ + '.' + o.name}
+               return json.JSONEncoder.default(self, o)
+       
+       
+    1: def log_parameters_lite(log_file, args):
+           log_params = {}
+           for param_name, param_value in args.__dict__.items():
+               log_params[param_name] = param_value
+           if args.args_data is not None:
+               stub_method = pickle.loads(base64.b64decode(args.args_data))
+               method_args = stub_method.kwargs
+               log_params["json_args"] = dict()
+               for k, v in list(method_args.items()):
+                   log_params["json_args"][k] = stub_to_json(v)
+               kwargs = stub_method.obj.kwargs
+               for k in ["baseline", "env", "policy"]:
+                   if k in kwargs:
+                       log_params["json_args"][k] = stub_to_json(kwargs.pop(k))
+               log_params["json_args"]["algo"] = stub_to_json(stub_method.obj)
+           mkdir_p(os.path.dirname(log_file))
+           with open(log_file, "w") as f:
+               json.dump(log_params, f, indent=2, sort_keys=True, cls=MyEncoder)
+       
+       
+    1: def log_variant(log_file, variant_data):
+           mkdir_p(os.path.dirname(log_file))
+           if hasattr(variant_data, "dump"):
+               variant_data = variant_data.dump()
+           variant_json = stub_to_json(variant_data)
+           with open(log_file, "w") as f:
+               json.dump(variant_json, f, indent=2, sort_keys=True, cls=MyEncoder)
+       
+       
+    1: def record_tabular_misc_stat(key, values, placement='back'):
+           if placement == 'front':
+               prefix = ""
+               suffix = key
+           else:
+               prefix = key
+               suffix = ""
+           if len(values) > 0:
+               record_tabular(prefix + "Average" + suffix, np.average(values))
+               record_tabular(prefix + "Std" + suffix, np.std(values))
+               record_tabular(prefix + "Median" + suffix, np.median(values))
+               record_tabular(prefix + "Min" + suffix, np.min(values))
+               record_tabular(prefix + "Max" + suffix, np.max(values))
+           else:
+               record_tabular(prefix + "Average" + suffix, np.nan)
+               record_tabular(prefix + "Std" + suffix, np.nan)
+               record_tabular(prefix + "Median" + suffix, np.nan)
+               record_tabular(prefix + "Min" + suffix, np.nan)
+               record_tabular(prefix + "Max" + suffix, np.nan)

@@ -1,0 +1,25 @@
+    1: import numpy as np
+    1: from rllab.baselines.base import Baseline
+    1: from rllab.misc.overrides import overrides
+       
+       
+    2: class ZeroBaseline(Baseline):
+       
+    1:     def __init__(self, env_spec):
+               pass
+       
+    1:     @overrides
+    1:     def get_param_values(self, **kwargs):
+               return None
+       
+    1:     @overrides
+    1:     def set_param_values(self, val, **kwargs):
+               pass
+       
+    1:     @overrides
+    1:     def fit(self, paths):
+               pass
+       
+    1:     @overrides
+    1:     def predict(self, path):
+               return np.zeros_like(path["rewards"])

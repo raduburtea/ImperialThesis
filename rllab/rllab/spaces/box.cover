@@ -1,0 +1,77 @@
+    1: from rllab.core.serializable import Serializable
+    1: from .base import Space
+    1: import numpy as np
+    1: from rllab.misc import ext
+    1: import theano
+       
+       
+    2: class Box(Space):
+    1:     """
+           A box in R^n.
+           I.e., each coordinate is bounded.
+           """
+       
+    1:     def __init__(self, low, high, shape=None):
+               """
+               Two kinds of valid input:
+                   Box(-1.0, 1.0, (3,4)) # low and high are scalars, and shape is provided
+                   Box(np.array([-1.0,-2.0]), np.array([2.0,4.0])) # low and high are arrays of the same shape
+               """
+    4:         if shape is None:
+    4:             assert low.shape == high.shape
+    4:             self.low = low
+    4:             self.high = high
+               else:
+                   assert np.isscalar(low) and np.isscalar(high)
+                   self.low = low + np.zeros(shape)
+                   self.high = high + np.zeros(shape)
+       
+    1:     def sample(self):
+               return np.random.uniform(low=self.low, high=self.high, size=self.low.shape)
+       
+    1:     def contains(self, x):
+               return x.shape == self.shape and (x >= self.low).all() and (x <= self.high).all()
+       
+    1:     @property
+    1:     def shape(self):
+               return self.low.shape
+       
+    1:     @property
+    1:     def flat_dim(self):
+    4:         return np.prod(self.low.shape)
+       
+    1:     @property
+    1:     def bounds(self):
+               return self.low, self.high
+       
+    1:     def flatten(self, x):
+300000:         return np.asarray(x).flatten()
+       
+    1:     def unflatten(self, x):
+               return np.asarray(x).reshape(self.shape)
+       
+    1:     def flatten_n(self, xs):
+               xs = np.asarray(xs)
+               return xs.reshape((xs.shape[0], -1))
+       
+    1:     def unflatten_n(self, xs):
+               xs = np.asarray(xs)
+               return xs.reshape((xs.shape[0],) + self.shape)
+       
+    1:     def __repr__(self):
+               return "Box" + str(self.shape)
+       
+    1:     def __eq__(self, other):
+               return isinstance(other, Box) and np.allclose(self.low, other.low) and \
+                      np.allclose(self.high, other.high)
+       
+    1:     def __hash__(self):
+               return hash((self.low, self.high))
+       
+    1:     def new_tensor_variable(self, name, extra_dims):
+    4:         return ext.new_tensor(
+    2:             name=name,
+    2:             ndim=extra_dims+1,
+    2:             dtype=theano.config.floatX
+               )
+       

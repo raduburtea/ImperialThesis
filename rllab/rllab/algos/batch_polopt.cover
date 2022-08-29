@@ -1,0 +1,173 @@
+    1: from rllab.algos.base import RLAlgorithm
+    1: from rllab.sampler import parallel_sampler
+    1: from rllab.sampler.base import BaseSampler
+    1: import rllab.misc.logger as logger
+    1: import rllab.plotter as plotter
+    1: from rllab.policies.base import Policy
+    1: import wandb
+       
+       
+    2: class BatchSampler(BaseSampler):
+    1:     def __init__(self, algo):
+               """
+               :type algo: BatchPolopt
+               """
+               self.algo = algo
+       
+    1:     def start_worker(self):
+               parallel_sampler.populate_task(self.algo.env, self.algo.policy, scope=self.algo.scope)
+       
+    1:     def shutdown_worker(self):
+               parallel_sampler.terminate_task(scope=self.algo.scope)
+       
+    1:     def obtain_samples(self, itr):
+               cur_params = self.algo.policy.get_param_values()
+               paths = parallel_sampler.sample_paths(
+                   policy_params=cur_params,
+                   max_samples=self.algo.batch_size,
+                   max_path_length=self.algo.max_path_length,
+                   scope=self.algo.scope,
+               )
+               if self.algo.whole_paths:
+                   return paths
+               else:
+                   paths_truncated = parallel_sampler.truncate_paths(paths, self.algo.batch_size)
+                   return paths_truncated
+       
+       
+    2: class BatchPolopt(RLAlgorithm):
+    1:     """
+           Base class for batch sampling-based policy optimization methods.
+           This includes various policy gradient methods like vpg, npg, ppo, trpo, etc.
+           """
+       
+    1:     def __init__(
+                   self,
+                   env,
+                   policy,
+                   baseline,
+                   scope=None,
+                   n_itr=500,
+                   start_itr=0,
+                   batch_size=5000,
+                   max_path_length=500,
+                   discount=0.99,
+                   gae_lambda=1,
+                   plot=False,
+                   pause_for_plot=False,
+                   center_adv=True,
+                   positive_adv=False,
+                   store_paths=False,
+                   whole_paths=True,
+                   sampler_cls=None,
+                   sampler_args=None,
+                   neptune_instance=None,
+                   **kwargs
+           ):
+               """
+               :param env: Environment
+               :param policy: Policy
+               :type policy: Policy
+               :param baseline: Baseline
+               :param scope: Scope for identifying the algorithm. Must be specified if running multiple algorithms
+               simultaneously, each using different environments and policies
+               :param n_itr: Number of iterations.
+               :param start_itr: Starting iteration.
+               :param batch_size: Number of samples per iteration.
+               :param max_path_length: Maximum length of a single rollout.
+               :param discount: Discount.
+               :param gae_lambda: Lambda used for generalized advantage estimation.
+               :param plot: Plot evaluation run after each iteration.
+               :param pause_for_plot: Whether to pause before contiuing when plotting.
+               :param center_adv: Whether to rescale the advantages so that they have mean 0 and standard deviation 1.
+               :param positive_adv: Whether to shift the advantages so that they are always positive. When used in
+               conjunction with center_adv the advantages will be standardized before shifting.
+               :param store_paths: Whether to save all paths data to the snapshot.
+               """
+    1:         self.env = env
+    1:         self.policy = policy
+    1:         self.baseline = baseline
+    1:         self.scope = scope
+    1:         self.n_itr = n_itr
+    1:         self.current_itr = start_itr
+    1:         self.batch_size = batch_size
+    1:         self.max_path_length = max_path_length
+    1:         self.discount = discount
+    1:         self.gae_lambda = gae_lambda
+    1:         self.plot = plot
+    1:         self.pause_for_plot = pause_for_plot
+    1:         self.center_adv = center_adv
+    1:         self.positive_adv = positive_adv
+    1:         self.store_paths = store_paths
+    1:         self.whole_paths = whole_paths
+    1:         if sampler_cls is None:
+                   sampler_cls = BatchSampler
+    1:         if sampler_args is None:
+    1:             sampler_args = dict()
+    1:         self.neptune_instance=neptune_instance
+    1:         self.sampler = sampler_cls(self, self.neptune_instance, **sampler_args)
+               
+       
+    1:     def start_worker(self):
+    1:         self.sampler.start_worker()
+    1:         if self.plot:
+                   plotter.init_plot(self.env, self.policy)
+       
+    1:     def shutdown_worker(self):
+    1:         self.sampler.shutdown_worker()
+       
+    1:     def train(self):
+    1:         self.start_worker()
+    1:         self.init_opt()
+    3:         for itr in range(self.current_itr, self.n_itr):
+    2:             with logger.prefix('itr #%d | ' % itr):
+    2:                 paths = self.sampler.obtain_samples(itr)
+    2:                 samples_data = self.sampler.process_samples(itr, paths)
+                       # self.log_diagnostics(paths)
+    2:                 self.optimize_policy(itr, samples_data)
+    2:                 logger.log("saving snapshot...")
+    2:                 params = self.get_itr_snapshot(itr, samples_data)
+    2:                 self.current_itr = itr + 1
+    2:                 params["algo"] = self
+    2:                 if self.store_paths:
+                           params["paths"] = samples_data["paths"]
+    2:                 logger.save_itr_params(itr, params)
+    2:                 logger.log("saved")
+    2:                 logger.dump_tabular(with_prefix=False)
+    2:                 if self.plot:
+                           self.update_plot()
+                           if self.pause_for_plot:
+                               input("Plotting evaluation run: Press Enter to "
+                                         "continue...")
+                                         
+    1:         if self.env.name == "NetworkManagement":
+                   self.env.plot_network()
+       
+       
+    1:         self.shutdown_worker()
+       
+    1:     def log_diagnostics(self, paths):
+               self.env.log_diagnostics(paths)
+               self.policy.log_diagnostics(paths)
+               self.baseline.log_diagnostics(paths)
+       
+    1:     def init_opt(self):
+               """
+               Initialize the optimization procedure. If using theano / cgt, this may
+               include declaring all the variables and compiling functions
+               """
+               raise NotImplementedError
+       
+    1:     def get_itr_snapshot(self, itr, samples_data):
+               """
+               Returns all the data that should be saved in the snapshot for this
+               iteration.
+               """
+               raise NotImplementedError
+       
+    1:     def optimize_policy(self, itr, samples_data):
+               raise NotImplementedError
+       
+    1:     def update_plot(self):
+               if self.plot:
+                   plotter.update_plot(self.policy, self.max_path_length)

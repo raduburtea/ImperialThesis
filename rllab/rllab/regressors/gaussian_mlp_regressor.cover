@@ -1,0 +1,277 @@
+    1: import lasagne
+    1: import lasagne.layers as L
+    1: import lasagne.nonlinearities as NL
+    1: import numpy as np
+    1: import theano
+    1: import theano.tensor as TT
+       
+    1: from rllab.core.lasagne_layers import ParamLayer
+    1: from rllab.core.lasagne_powered import LasagnePowered
+    1: from rllab.core.network import MLP
+    1: from rllab.core.serializable import Serializable
+    1: from rllab.misc import logger
+    1: from rllab.misc.ext import compile_function
+    1: from rllab.optimizers.lbfgs_optimizer import LbfgsOptimizer
+    1: from rllab.optimizers.penalty_lbfgs_optimizer import PenaltyLbfgsOptimizer
+    1: from rllab.distributions.diagonal_gaussian import DiagonalGaussian
+    1: from rllab.misc.ext import iterate_minibatches_generic
+       
+       
+    2: class GaussianMLPRegressor(LasagnePowered):
+    1:     """
+           A class for performing regression by fitting a Gaussian distribution to the outputs.
+           """
+       
+    1:     def __init__(
+                   self,
+                   input_shape,
+                   output_dim,
+    1:             mean_network=None,
+    1:             hidden_sizes=(32, 32),
+    1:             hidden_nonlinearity=NL.rectify,
+    1:             optimizer=None,
+    1:             use_trust_region=True,
+    1:             step_size=0.01,
+    1:             learn_std=True,
+    1:             init_std=1.0,
+    1:             adaptive_std=False,
+    1:             std_share_network=False,
+    1:             std_hidden_sizes=(32, 32),
+    1:             std_nonlinearity=None,
+    1:             normalize_inputs=True,
+    1:             normalize_outputs=True,
+    1:             name=None,
+    1:             batchsize=None,
+    1:             subsample_factor=1.,
+           ):
+               """
+               :param input_shape: Shape of the input data.
+               :param output_dim: Dimension of output.
+               :param hidden_sizes: Number of hidden units of each layer of the mean network.
+               :param hidden_nonlinearity: Non-linearity used for each layer of the mean network.
+               :param optimizer: Optimizer for minimizing the negative log-likelihood.
+               :param use_trust_region: Whether to use trust region constraint.
+               :param step_size: KL divergence constraint for each iteration
+               :param learn_std: Whether to learn the standard deviations. Only effective if adaptive_std is False. If
+               adaptive_std is True, this parameter is ignored, and the weights for the std network are always learned.
+               :param adaptive_std: Whether to make the std a function of the states.
+               :param std_share_network: Whether to use the same network as the mean.
+               :param std_hidden_sizes: Number of hidden units of each layer of the std network. Only used if
+               `std_share_network` is False. It defaults to the same architecture as the mean.
+               :param std_nonlinearity: Non-linearity used for each layer of the std network. Only used if `std_share_network`
+               is False. It defaults to the same non-linearity as the mean.
+               """
+    2:         Serializable.quick_init(self, locals())
+       
+    2:         self._batchsize = batchsize
+    2:         self._subsample_factor = subsample_factor
+       
+    2:         if optimizer is None:
+                   if use_trust_region:
+                       optimizer = PenaltyLbfgsOptimizer()
+                   else:
+                       optimizer = LbfgsOptimizer()
+       
+    2:         self._optimizer = optimizer
+       
+    2:         if mean_network is None:
+    4:             mean_network = MLP(
+    2:                 input_shape=input_shape,
+    2:                 output_dim=output_dim,
+    2:                 hidden_sizes=hidden_sizes,
+    2:                 hidden_nonlinearity=hidden_nonlinearity,
+    2:                 output_nonlinearity=None,
+                   )
+       
+    2:         l_mean = mean_network.output_layer
+       
+    2:         if adaptive_std:
+                   l_log_std = MLP(
+                       input_shape=input_shape,
+                       input_var=mean_network.input_layer.input_var,
+                       output_dim=output_dim,
+                       hidden_sizes=std_hidden_sizes,
+                       hidden_nonlinearity=std_nonlinearity,
+                       output_nonlinearity=None,
+                   ).output_layer
+               else:
+    4:             l_log_std = ParamLayer(
+    2:                 mean_network.input_layer,
+    2:                 num_units=output_dim,
+    2:                 param=lasagne.init.Constant(np.log(init_std)),
+    2:                 name="output_log_std",
+    2:                 trainable=learn_std,
+                   )
+       
+    2:         LasagnePowered.__init__(self, [l_mean, l_log_std])
+       
+    2:         xs_var = mean_network.input_layer.input_var
+    2:         ys_var = TT.matrix("ys")
+    2:         old_means_var = TT.matrix("old_means")
+    2:         old_log_stds_var = TT.matrix("old_log_stds")
+       
+    4:         x_mean_var = theano.shared(
+    2:             np.zeros((1,) + input_shape, dtype=theano.config.floatX),
+    2:             name="x_mean",
+    2:             broadcastable=(True,) + (False,) * len(input_shape)
+               )
+    4:         x_std_var = theano.shared(
+    2:             np.ones((1,) + input_shape, dtype=theano.config.floatX),
+    2:             name="x_std",
+    2:             broadcastable=(True,) + (False,) * len(input_shape)
+               )
+    4:         y_mean_var = theano.shared(
+    2:             np.zeros((1, output_dim), dtype=theano.config.floatX),
+    2:             name="y_mean",
+    2:             broadcastable=(True, False)
+               )
+    4:         y_std_var = theano.shared(
+    2:             np.ones((1, output_dim), dtype=theano.config.floatX),
+    2:             name="y_std",
+    2:             broadcastable=(True, False)
+               )
+       
+    2:         normalized_xs_var = (xs_var - x_mean_var) / x_std_var
+    2:         normalized_ys_var = (ys_var - y_mean_var) / y_std_var
+       
+    4:         normalized_means_var = L.get_output(
+    2:             l_mean, {mean_network.input_layer: normalized_xs_var})
+    4:         normalized_log_stds_var = L.get_output(
+    2:             l_log_std, {mean_network.input_layer: normalized_xs_var})
+       
+    2:         means_var = normalized_means_var * y_std_var + y_mean_var
+    2:         log_stds_var = normalized_log_stds_var + TT.log(y_std_var)
+       
+    2:         normalized_old_means_var = (old_means_var - y_mean_var) / y_std_var
+    2:         normalized_old_log_stds_var = old_log_stds_var - TT.log(y_std_var)
+       
+    2:         dist = self._dist = DiagonalGaussian(output_dim)
+       
+    4:         normalized_dist_info_vars = dict(
+    2:             mean=normalized_means_var, log_std=normalized_log_stds_var)
+       
+    4:         mean_kl = TT.mean(dist.kl_sym(
+    4:             dict(mean=normalized_old_means_var,
+    2:                  log_std=normalized_old_log_stds_var),
+    2:             normalized_dist_info_vars,
+               ))
+       
+    2:         loss = - \
+    4:             TT.mean(dist.log_likelihood_sym(
+    2:                 normalized_ys_var, normalized_dist_info_vars))
+       
+    2:         self._f_predict = compile_function([xs_var], means_var)
+    2:         self._f_pdists = compile_function([xs_var], [means_var, log_stds_var])
+    2:         self._l_mean = l_mean
+    2:         self._l_log_std = l_log_std
+       
+    4:         optimizer_args = dict(
+    2:             loss=loss,
+    2:             target=self,
+    2:             network_outputs=[normalized_means_var, normalized_log_stds_var],
+               )
+       
+    2:         if use_trust_region:
+    2:             optimizer_args["leq_constraint"] = (mean_kl, step_size)
+    2:             optimizer_args["inputs"] = [
+    2:                 xs_var, ys_var, old_means_var, old_log_stds_var]
+               else:
+                   optimizer_args["inputs"] = [xs_var, ys_var]
+       
+    2:         self._optimizer.update_opt(**optimizer_args)
+       
+    2:         self._use_trust_region = use_trust_region
+    2:         self._name = name
+       
+    2:         self._normalize_inputs = normalize_inputs
+    2:         self._normalize_outputs = normalize_outputs
+    2:         self._mean_network = mean_network
+    2:         self._x_mean_var = x_mean_var
+    2:         self._x_std_var = x_std_var
+    2:         self._y_mean_var = y_mean_var
+    2:         self._y_std_var = y_std_var
+       
+    1:     def fit(self, xs, ys):
+       
+    4:         if self._subsample_factor < 1:
+                   num_samples_tot = xs.shape[0]
+                   idx = np.random.randint(0, num_samples_tot, int(num_samples_tot * self._subsample_factor))
+                   xs, ys = xs[idx], ys[idx]
+       
+    4:         if self._normalize_inputs:
+                   # recompute normalizing constants for inputs
+    8:             self._x_mean_var.set_value(
+    4:                 np.mean(xs, axis=0, keepdims=True).astype(theano.config.floatX))
+    8:             self._x_std_var.set_value(
+    4:                 (np.std(xs, axis=0, keepdims=True) + 1e-8).astype(theano.config.floatX))
+    4:         if self._normalize_outputs:
+                   # recompute normalizing constants for outputs
+    8:             self._y_mean_var.set_value(
+    4:                 np.mean(ys, axis=0, keepdims=True).astype(theano.config.floatX))
+    8:             self._y_std_var.set_value(
+    4:                 (np.std(ys, axis=0, keepdims=True) + 1e-8).astype(theano.config.floatX))
+    4:         if self._name:
+    4:             prefix = self._name + "_"
+               else:
+                   prefix = ""
+               # FIXME: needs batch computation to avoid OOM.
+    4:         loss_before, loss_after, mean_kl, batch_count = 0., 0., 0., 0
+    8:         for batch in iterate_minibatches_generic(input_lst=[xs, ys], batchsize=self._batchsize, shuffle=True):
+    4:             batch_count += 1
+    4:             xs, ys = batch
+    4:             if self._use_trust_region:
+    4:                 old_means, old_log_stds = self._f_pdists(xs)
+    4:                 inputs = [xs, ys, old_means, old_log_stds]
+                   else:
+                       inputs = [xs, ys]
+    4:             loss_before += self._optimizer.loss(inputs)
+       
+    4:             self._optimizer.optimize(inputs)
+    4:             loss_after += self._optimizer.loss(inputs)
+    4:             if self._use_trust_region:
+    4:                 mean_kl += self._optimizer.constraint_val(inputs)
+       
+    4:         logger.record_tabular(prefix + 'LossBefore', loss_before / batch_count)
+    4:         logger.record_tabular(prefix + 'LossAfter', loss_after / batch_count)
+    4:         logger.record_tabular(prefix + 'dLoss', loss_before - loss_after / batch_count)
+    4:         if self._use_trust_region:
+    4:             logger.record_tabular(prefix + 'MeanKL', mean_kl / batch_count)
+       
+    1:     def predict(self, xs):
+               """
+               Return the maximum likelihood estimate of the predicted y.
+               :param xs:
+               :return:
+               """
+10000:         return self._f_predict(xs)
+       
+    1:     def sample_predict(self, xs):
+               """
+               Sample one possible output from the prediction distribution.
+               :param xs:
+               :return:
+               """
+               means, log_stds = self._f_pdists(xs)
+               return self._dist.sample(dict(mean=means, log_std=log_stds))
+       
+    1:     def predict_log_likelihood(self, xs, ys):
+               means, log_stds = self._f_pdists(xs)
+               return self._dist.log_likelihood(ys, dict(mean=means, log_std=log_stds))
+       
+    1:     def log_likelihood_sym(self, x_var, y_var):
+               normalized_xs_var = (x_var - self._x_mean_var) / self._x_std_var
+       
+               normalized_means_var, normalized_log_stds_var = \
+                   L.get_output([self._l_mean, self._l_log_std], {
+                       self._mean_network.input_layer: normalized_xs_var})
+       
+               means_var = normalized_means_var * self._y_std_var + self._y_mean_var
+               log_stds_var = normalized_log_stds_var + TT.log(self._y_std_var)
+       
+               return self._dist.log_likelihood_sym(y_var, dict(mean=means_var, log_std=log_stds_var))
+       
+    1:     def get_param_values(self, **tags):
+    4:         return LasagnePowered.get_param_values(self, **tags)
+       
+    1:     def set_param_values(self, flattened_params, **tags):
+    4:         return LasagnePowered.set_param_values(self, flattened_params, **tags)

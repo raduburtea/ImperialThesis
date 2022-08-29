@@ -1,0 +1,20 @@
+    1: from rllab.core.parameterized import Parameterized
+    1: from rllab.misc.overrides import overrides
+    1: import lasagne.layers as L
+       
+       
+    2: class LasagnePowered(Parameterized):
+    1:     def __init__(self, output_layers):
+    6:         self._output_layers = output_layers
+    6:         super(LasagnePowered, self).__init__()
+       
+    1:     @property
+    1:     def output_layers(self):
+               return self._output_layers
+       
+    1:     @overrides
+    1:     def get_params_internal(self, **tags):  # this gives ALL the vars (not the params values)
+   12:         return L.get_all_params(  # this lasagne function also returns all var below the passed layers
+    4:             L.concat(self._output_layers),
+    4:             **tags
+               )

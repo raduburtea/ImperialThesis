@@ -1,0 +1,49 @@
+    1: import numpy as np
+       
+    1: from rllab.core.serializable import Serializable
+    1: from rllab.core.parameterized import Parameterized
+    1: from rllab.baselines.base import Baseline
+    1: from rllab.misc.overrides import overrides
+    1: from rllab.regressors.gaussian_mlp_regressor import GaussianMLPRegressor
+       
+       
+    2: class GaussianMLPBaseline(Baseline, Parameterized, Serializable):
+       
+    1:     def __init__(
+                   self,
+                   env_spec,
+                   subsample_factor=1.,
+                   num_seq_inputs=1,
+                   regressor_args=None,
+                   target_key='returns',
+           ):
+    2:         Serializable.quick_init(self, locals())
+    2:         super(GaussianMLPBaseline, self).__init__(env_spec)
+    2:         if regressor_args is None:
+                   regressor_args = dict()
+       
+    6:         self._regressor = GaussianMLPRegressor(
+    2:             input_shape=(env_spec.observation_space.flat_dim * num_seq_inputs,),
+    2:             output_dim=1,
+    2:             name='vf_'+target_key,
+    2:             **regressor_args
+               )
+    2:         self._target_key = target_key
+       
+    1:     @overrides
+    1:     def fit(self, paths):
+10008:         observations = np.concatenate([p["observations"] for p in paths])
+10008:         returns = np.concatenate([p[self._target_key] for p in paths])
+    4:         self._regressor.fit(observations, returns.reshape((-1, 1)))
+       
+    1:     @overrides
+    1:     def predict(self, path):
+10000:         return self._regressor.predict(path["observations"]).flatten()
+       
+    1:     @overrides
+    1:     def get_param_values(self, **tags):
+               return self._regressor.get_param_values(**tags)
+       
+    1:     @overrides
+    1:     def set_param_values(self, flattened_params, **tags):
+               self._regressor.set_param_values(flattened_params, **tags)

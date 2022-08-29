@@ -1,0 +1,38 @@
+    1: import theano.tensor as TT
+       
+    2: class Distribution(object):
+       
+    1:     @property
+    1:     def dim(self):
+               raise NotImplementedError
+       
+    1:     def kl_sym(self, old_dist_info_vars, new_dist_info_vars):
+               """
+               Compute the symbolic KL divergence of two distributions
+               """
+               raise NotImplementedError
+       
+    1:     def kl(self, old_dist_info, new_dist_info):
+               """
+               Compute the KL divergence of two distributions
+               """
+               raise NotImplementedError
+       
+    1:     def likelihood_ratio_sym(self, x_var, old_dist_info_vars, new_dist_info_vars):
+               raise NotImplementedError
+       
+    1:     def entropy(self, dist_info):
+               raise NotImplementedError
+       
+    1:     def log_likelihood_sym(self, x_var, dist_info_vars):
+               raise NotImplementedError
+       
+    1:     def likelihood_sym(self, x_var, dist_info_vars):
+               return TT.exp(self.log_likelihood_sym(x_var, dist_info_vars))
+       
+    1:     def log_likelihood(self, xs, dist_info):
+               raise NotImplementedError
+       
+    1:     @property
+    1:     def dist_info_keys(self):
+               raise NotImplementedError

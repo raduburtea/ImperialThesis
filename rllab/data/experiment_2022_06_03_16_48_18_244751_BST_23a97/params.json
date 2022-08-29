@@ -1,0 +1,18 @@
+{
+  "args_data": null,
+  "exp_name": "experiment_2022_06_03_16_48_18_244751_BST_23a97",
+  "log_dir": null,
+  "log_tabular_only": false,
+  "n_parallel": 1,
+  "params_log_file": "params.json",
+  "plot": false,
+  "resume_from": null,
+  "seed": null,
+  "snapshot_gap": 1,
+  "snapshot_mode": "all",
+  "tabular_log_file": "progress.csv",
+  "text_log_file": "debug.log",
+  "use_cloudpickle": false,
+  "variant_data": null,
+  "variant_log_file": "variant.json"
+}

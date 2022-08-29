@@ -1,0 +1,43 @@
+    1: import numpy as np
+    1: from rllab.misc import tensor_utils
+    1: import time
+       
+       
+    2: def rollout(env, agent, max_path_length=np.inf, animated=False, speedup=1,
+    1:             always_return_paths=False):
+ 5000:     observations = []
+ 5000:     actions = []
+ 5000:     rewards = []
+ 5000:     agent_infos = []
+ 5000:     env_infos = []
+ 5000:     o = env.reset()
+ 5000:     agent.reset()
+ 5000:     path_length = 0
+ 5000:     if animated:
+               env.render()
+105000:     while path_length < max_path_length:
+100000:         a, agent_info = agent.get_action(o)
+100000:         next_o, r, d, env_info = env.step(a)
+100000:         observations.append(env.observation_space.flatten(o))
+100000:         rewards.append(r)
+100000:         actions.append(env.action_space.flatten(a))
+100000:         agent_infos.append(agent_info)
+100000:         env_infos.append(env_info)
+100000:         path_length += 1
+100000:         if d:
+                   break
+100000:         o = next_o
+100000:         if animated:
+                   env.render()
+                   timestep = 0.05
+                   time.sleep(timestep / speedup)
+ 5000:     if animated and not always_return_paths:
+               return
+       
+10000:     return dict(
+ 5000:         observations=tensor_utils.stack_tensor_list(observations),
+ 5000:         actions=tensor_utils.stack_tensor_list(actions),
+ 5000:         rewards=tensor_utils.stack_tensor_list(rewards),
+ 5000:         agent_infos=tensor_utils.stack_tensor_dict_list(agent_infos),
+ 5000:         env_infos=tensor_utils.stack_tensor_dict_list(env_infos),
+           )

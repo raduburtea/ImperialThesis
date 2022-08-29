@@ -1,0 +1,39 @@
+    1: from rllab.misc import autoargs
+       
+       
+    2: class Baseline(object):
+       
+    1:     def __init__(self, env_spec):
+    2:         self._mdp_spec = env_spec
+       
+    1:     @property
+    1:     def algorithm_parallelized(self):
+               return False
+       
+    1:     def get_param_values(self):
+               raise NotImplementedError
+       
+    1:     def set_param_values(self, val):
+               raise NotImplementedError
+       
+    1:     def fit(self, paths):
+               raise NotImplementedError
+       
+    1:     def predict(self, path):
+               raise NotImplementedError
+       
+    1:     @classmethod
+    1:     @autoargs.add_args
+    1:     def add_args(cls, parser):
+               pass
+       
+    1:     @classmethod
+    1:     @autoargs.new_from_args
+    1:     def new_from_args(cls, args, mdp):
+               pass
+       
+    1:     def log_diagnostics(self, paths):
+               """
+               Log extra information per iteration based on the collected paths
+               """
+               pass

@@ -1,0 +1,19 @@
+    1: from rllab.core.parameterized import Parameterized
+    1: from rllab.core.serializable import Serializable
+    1: from sandbox.cpo.safety_constraints.base import *
+    1: import numpy as np
+       
+       # This constraint is always, trivially, satisfied. 
+    2: class TrivialSafetyConstraint(SafetyConstraint, Parameterized):
+       
+    1:     def __init__(self, max_value=1., **kwargs):
+               self.max_value = max_value
+               super(TrivialSafetyConstraint,self).__init__(**kwargs)
+       
+    1:     def evaluate(self, path):
+               #return np.zeros_like(path['rewards'])
+               return 0.5*np.random.rand(len(path['rewards']))
+       
+    1:     def fit(self, paths):
+               pass
+       

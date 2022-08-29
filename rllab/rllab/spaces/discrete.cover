@@ -1,0 +1,81 @@
+    1: from .base import Space
+    1: import numpy as np
+    1: from rllab.misc import special
+    1: from rllab.misc import ext
+       
+       
+    2: class Discrete(Space):
+    1:     """
+           {0,1,...,n-1}
+           """
+       
+    1:     def __init__(self, n):
+               self._n = n
+       
+    1:     @property
+    1:     def n(self):
+               return self._n
+       
+    1:     def sample(self):
+               return np.random.randint(self.n)
+       
+    1:     def contains(self, x):
+               x = np.asarray(x)
+               return x.shape == () and x.dtype.kind == 'i' and x >= 0 and x < self.n
+       
+    1:     def __repr__(self):
+               return "Discrete(%d)" % self.n
+       
+    1:     def __eq__(self, other):
+               return self.n == other.n
+       
+    1:     def flatten(self, x):
+               return special.to_onehot(x, self.n)
+       
+    1:     def unflatten(self, x):
+               return special.from_onehot(x)
+       
+    1:     def flatten_n(self, x):
+               return special.to_onehot_n(x, self.n)
+       
+    1:     def unflatten_n(self, x):
+               return special.from_onehot_n(x)
+       
+    1:     @property
+    1:     def flat_dim(self):
+               return self.n
+       
+    1:     def weighted_sample(self, weights):
+               return special.weighted_sample(weights, range(self.n))
+       
+    1:     @property
+    1:     def default_value(self):
+               return 0
+       
+    1:     def new_tensor_variable(self, name, extra_dims):
+               if self.n <= 2 ** 8:
+                   return ext.new_tensor(
+                       name=name,
+                       ndim=extra_dims+1,
+                       dtype='uint8'
+                   )
+               elif self.n <= 2 ** 16:
+                   return ext.new_tensor(
+                       name=name,
+                       ndim=extra_dims+1,
+                       dtype='uint16'
+                   )
+               else:
+                   return ext.new_tensor(
+                       name=name,
+                       ndim=extra_dims+1,
+                       dtype='uint32'
+                   )
+       
+    1:     def __eq__(self, other):
+               if not isinstance(other, Discrete):
+                   return False
+               return self.n == other.n
+       
+    1:     def __hash__(self):
+               return hash(self.n)

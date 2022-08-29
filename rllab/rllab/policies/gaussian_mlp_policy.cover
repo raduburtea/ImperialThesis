@@ -1,0 +1,172 @@
+    1: from turtle import shape
+    1: import lasagne
+    1: import lasagne.layers as L
+    1: import lasagne.nonlinearities as NL
+    1: import numpy as np
+       
+    1: from rllab.core.lasagne_layers import ParamLayer
+    1: from rllab.core.lasagne_powered import LasagnePowered
+    1: from rllab.core.network import MLP
+       # from gym.spaces import Box
+    1: from rllab.spaces import Box
+       
+    1: from rllab.core.serializable import Serializable
+    1: from rllab.policies.base import StochasticPolicy
+    1: from rllab.misc.overrides import overrides
+    1: from rllab.misc import logger
+    1: from rllab.misc import ext
+    1: from rllab.distributions.diagonal_gaussian import DiagonalGaussian
+    1: import theano.tensor as TT
+       
+       
+    1: def flat_dim(box_obj):
+               return np.prod(box_obj.low.shape)
+       
+    2: class GaussianMLPPolicy(StochasticPolicy, LasagnePowered):
+    1:     def __init__(
+                   self,
+                   env_spec,
+    1:             hidden_sizes=(32, 32),
+    1:             learn_std=True,
+    1:             init_std=1.0,
+    1:             adaptive_std=False,
+    1:             std_share_network=False,
+    1:             std_hidden_sizes=(32, 32),
+    1:             min_std=1e-6,
+    1:             std_hidden_nonlinearity=NL.tanh,
+    1:             hidden_nonlinearity=NL.tanh,
+    1:             output_nonlinearity=None,
+    1:             mean_network=None,
+    1:             std_network=None,
+    1:             dist_cls=DiagonalGaussian,
+           ):
+               """
+               :param env_spec:
+               :param hidden_sizes: list of sizes for the fully-connected hidden layers
+               :param learn_std: Is std trainable
+               :param init_std: Initial std
+               :param adaptive_std:
+               :param std_share_network:
+               :param std_hidden_sizes: list of sizes for the fully-connected layers for std
+               :param min_std: whether to make sure that the std is at least some threshold value, to avoid numerical issues
+               :param std_hidden_nonlinearity:
+               :param hidden_nonlinearity: nonlinearity used for each hidden layer
+               :param output_nonlinearity: nonlinearity for the output layer
+               :param mean_network: custom network for the output mean
+               :param std_network: custom network for the output log std
+               :return:
+               """
+    1:         Serializable.quick_init(self, locals())
+               # print(env_spec.action_space)
+               # print(isinstance(env_spec.action_space, Box))
+    1:         assert isinstance(env_spec.action_space, Box)
+       
+    1:         obs_dim = env_spec.observation_space.flat_dim
+    1:         action_dim = env_spec.action_space.flat_dim
+               
+               # print(obs_dim[0])
+    1:         print('action', action_dim)
+    1:         print(np.shape(obs_dim), np.shape(action_dim))
+       
+               # create network
+    1:         if mean_network is None:
+    2:             mean_network = MLP(
+    1:                 input_shape=(obs_dim,),
+    1:                 output_dim=action_dim,
+    1:                 hidden_sizes=hidden_sizes,
+    1:                 hidden_nonlinearity=hidden_nonlinearity,
+    1:                 output_nonlinearity=output_nonlinearity,
+                   )
+    1:         self._mean_network = mean_network
+       
+    1:         l_mean = mean_network.output_layer
+    1:         obs_var = mean_network.input_layer.input_var
+       
+    1:         if std_network is not None:
+                   l_log_std = std_network.output_layer
+               else:
+    1:             if adaptive_std:
+                       std_network = MLP(
+                           input_shape=(obs_dim,),
+                           input_layer=mean_network.input_layer,
+                           output_dim=action_dim,
+                           hidden_sizes=std_hidden_sizes,
+                           hidden_nonlinearity=std_hidden_nonlinearity,
+                           output_nonlinearity=None,
+                       )
+                       l_log_std = std_network.output_layer
+                   else:
+    2:                 l_log_std = ParamLayer(
+    1:                     mean_network.input_layer,
+    1:                     num_units=action_dim,
+    1:                     param=lasagne.init.Constant(np.log(init_std)),
+    1:                     name="output_log_std",
+    1:                     trainable=learn_std,
+                       )
+       
+    1:         self.min_std = min_std
+       
+    1:         mean_var, log_std_var = L.get_output([l_mean, l_log_std])
+       
+    1:         if self.min_std is not None:
+    1:             log_std_var = TT.maximum(log_std_var, np.log(min_std))
+       
+    1:         self._mean_var, self._log_std_var = mean_var, log_std_var
+       
+    1:         self._l_mean = l_mean
+    1:         self._l_log_std = l_log_std
+       
+    1:         self._dist = dist_cls(action_dim)
+       
+    1:         LasagnePowered.__init__(self, [l_mean, l_log_std])
+    1:         super(GaussianMLPPolicy, self).__init__(env_spec)
+       
+    2:         self._f_dist = ext.compile_function(
+    1:             inputs=[obs_var],
+    1:             outputs=[mean_var, log_std_var],
+               )
+       
+    1:     def dist_info_sym(self, obs_var, state_info_vars=None):
+    1:         mean_var, log_std_var = L.get_output([self._l_mean, self._l_log_std], obs_var)
+    1:         if self.min_std is not None:
+    1:             log_std_var = TT.maximum(log_std_var, np.log(self.min_std))
+    1:         return dict(mean=mean_var, log_std=log_std_var)
+       
+    1:     @overrides
+    1:     def get_action(self, observation):
+100000:         flat_obs = self.observation_space.flatten(observation)
+400000:         mean, log_std = [x[0] for x in self._f_dist([flat_obs])]
+100000:         rnd = np.random.normal(size=mean.shape)
+100000:         action = rnd * np.exp(log_std) + mean
+100000:         return action, dict(mean=mean, log_std=log_std)
+       
+    1:     def get_actions(self, observations):
+               flat_obs = self.observation_space.flatten_n(observations)
+               means, log_stds = self._f_dist(flat_obs)
+               rnd = np.random.normal(size=means.shape)
+               actions = rnd * np.exp(log_stds) + means
+               return actions, dict(mean=means, log_std=log_stds)
+       
+    1:     def get_reparam_action_sym(self, obs_var, action_var, old_dist_info_vars):
+               """
+               Given observations, old actions, and distribution of old actions, return a symbolically reparameterized
+               representation of the actions in terms of the policy parameters
+               :param obs_var:
+               :param action_var:
+               :param old_dist_info_vars:
+               :return:
+               """
+               new_dist_info_vars = self.dist_info_sym(obs_var, action_var)
+               new_mean_var, new_log_std_var = new_dist_info_vars["mean"], new_dist_info_vars["log_std"]
+               old_mean_var, old_log_std_var = old_dist_info_vars["mean"], old_dist_info_vars["log_std"]
+               epsilon_var = (action_var - old_mean_var) / (TT.exp(old_log_std_var) + 1e-8)
+               new_action_var = new_mean_var + epsilon_var * TT.exp(new_log_std_var)
+               return new_action_var
+       
+    1:     def log_diagnostics(self, paths):
+               log_stds = np.vstack([path["agent_infos"]["log_std"] for path in paths])
+               logger.record_tabular('AveragePolicyStd', np.mean(np.exp(log_stds)))
+       
+    1:     @property
+    1:     def distribution(self):
+ 5005:         return self._dist

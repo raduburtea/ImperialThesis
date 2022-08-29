@@ -1,0 +1,198 @@
+       
+       
+    1: from joblib.pool import MemmappingPool
+    1: import multiprocessing as mp
+    1: from rllab.misc import logger
+    1: import pyprind
+    1: import time
+    1: import traceback
+    1: import sys
+       
+       
+    2: class ProgBarCounter(object):
+    1:     def __init__(self, total_count):
+    2:         self.total_count = total_count
+    2:         self.max_progress = 1000000
+    2:         self.cur_progress = 0
+    2:         self.cur_count = 0
+    2:         if not logger.get_log_tabular_only():
+    2:             self.pbar = pyprind.ProgBar(self.max_progress)
+               else:
+                   self.pbar = None
+       
+    1:     def inc(self, increment):
+ 5000:         if not logger.get_log_tabular_only():
+ 5000:             self.cur_count += increment
+ 5000:             new_progress = self.cur_count * self.max_progress / self.total_count
+ 5000:             if new_progress < self.max_progress:
+ 4998:                 self.pbar.update(new_progress - self.cur_progress)
+ 5000:             self.cur_progress = new_progress
+       
+    1:     def stop(self):
+    2:         if self.pbar is not None and self.pbar.active:
+    2:             self.pbar.stop()
+       
+       
+    2: class SharedGlobal(object):
+    1:     pass
+       
+       
+    2: class StatefulPool(object):
+    1:     def __init__(self):
+    1:         self.n_parallel = 1
+    1:         self.pool = None
+    1:         self.queue = None
+    1:         self.worker_queue = None
+    1:         self.G = SharedGlobal()
+       
+    1:     def initialize(self, n_parallel):
+               self.n_parallel = n_parallel
+               if self.pool is not None:
+                   print("Warning: terminating existing pool")
+                   self.pool.terminate()
+                   self.queue.close()
+                   self.worker_queue.close()
+                   self.G = SharedGlobal()
+               if n_parallel > 1:
+                   self.queue = mp.Queue()
+                   self.worker_queue = mp.Queue()
+                   self.pool = MemmapingPool(
+                       self.n_parallel,
+                       temp_folder="/tmp",
+                   )
+       
+    1:     def run_each(self, runner, args_list=None):
+               """
+               Run the method on each worker process, and collect the result of execution.
+               The runner method will receive 'G' as its first argument, followed by the arguments
+               in the args_list, if any
+               :return:
+               """
+    3:         if args_list is None:
+                   args_list = [tuple()] * self.n_parallel
+    3:         assert len(args_list) == self.n_parallel
+    3:         if self.n_parallel > 1:
+                   results = self.pool.map_async(
+                       _worker_run_each, [(runner, args) for args in args_list]
+                   )
+                   for i in range(self.n_parallel):
+                       self.worker_queue.get()
+                   for i in range(self.n_parallel):
+                       self.queue.put(None)
+                   return results.get()
+    3:         return [runner(self.G, *args_list[0])]
+       
+    1:     def run_map(self, runner, args_list):
+               if self.n_parallel > 1:
+                   return self.pool.map(_worker_run_map, [(runner, args) for args in args_list])
+               else:
+                   ret = []
+                   for args in args_list:
+                       ret.append(runner(self.G, *args))
+                   return ret
+       
+    1:     def run_imap_unordered(self, runner, args_list):
+               if self.n_parallel > 1:
+                   for x in self.pool.imap_unordered(_worker_run_map, [(runner, args) for args in args_list]):
+                       yield x
+               else:
+                   for args in args_list:
+                       yield runner(self.G, *args)
+       
+    1:     def run_collect(self, collect_once, threshold, args=None, show_prog_bar=True):
+               """
+               Run the collector method using the worker pool. The collect_once method will receive 'G' as
+               its first argument, followed by the provided args, if any. The method should return a pair of values.
+               The first should be the object to be collected, and the second is the increment to be added.
+               This will continue until the total increment reaches or exceeds the given threshold.
+       
+               Sample script:
+       
+               def collect_once(G):
+                   return 'a', 1
+       
+               stateful_pool.run_collect(collect_once, threshold=3) # => ['a', 'a', 'a']
+       
+               :param collector:
+               :param threshold:
+               :return:
+               """
+    2:         if args is None:
+                   args = tuple()
+    2:         if self.pool:
+                   manager = mp.Manager()
+                   counter = manager.Value('i', 0)
+                   lock = manager.RLock()
+                   results = self.pool.map_async(
+                       _worker_run_collect,
+                       [(collect_once, counter, lock, threshold, args)] * self.n_parallel
+                   )
+                   if show_prog_bar:
+                       pbar = ProgBarCounter(threshold)
+                   last_value = 0
+                   while True:
+                       time.sleep(0.1)
+                       with lock:
+                           if counter.value >= threshold:
+                               if show_prog_bar:
+                                   pbar.stop()
+                               break
+                           if show_prog_bar:
+                               pbar.inc(counter.value - last_value)
+                           last_value = counter.value
+                   return sum(results.get(), [])
+               else:
+    2:             count = 0
+    2:             results = []
+    2:             if show_prog_bar:
+    2:                 pbar = ProgBarCounter(threshold)
+ 5002:             while count < threshold:
+ 5000:                 result, inc = collect_once(self.G, *args)
+ 5000:                 results.append(result)
+ 5000:                 count += inc
+ 5000:                 if show_prog_bar:
+ 5000:                     pbar.inc(inc)
+    2:             if show_prog_bar:
+    2:                 pbar.stop()
+    2:             return results
+       
+       
+    1: singleton_pool = StatefulPool()
+       
+       
+    1: def _worker_run_each(all_args):
+           try:
+               runner, args = all_args
+               # signals to the master that this task is up and running
+               singleton_pool.worker_queue.put(None)
+               # wait for the master to signal continuation
+               singleton_pool.queue.get()
+               return runner(singleton_pool.G, *args)
+           except Exception:
+               raise Exception("".join(traceback.format_exception(*sys.exc_info())))
+       
+       
+    1: def _worker_run_collect(all_args):
+           try:
+               collect_once, counter, lock, threshold, args = all_args
+               collected = []
+               while True:
+                   with lock:
+                       if counter.value >= threshold:
+                           return collected
+                   result, inc = collect_once(singleton_pool.G, *args)
+                   collected.append(result)
+                   with lock:
+                       counter.value += inc
+                       if counter.value >= threshold:
+                           return collected
+           except Exception:
+               raise Exception("".join(traceback.format_exception(*sys.exc_info())))
+       
+       
+    1: def _worker_run_map(all_args):
+           try:
+               runner, args = all_args
+               return runner(singleton_pool.G, *args)
+           except Exception:
+               raise Exception("".join(traceback.format_exception(*sys.exc_info())))

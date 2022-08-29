@@ -1,0 +1,123 @@
+    1: import importlib.util
+    1: import sys
+    1: from venv import create
+    1: sys.path.append('./or-gym')
+    1: import numpy as np
+    1: from importlib import reload
+    1: import os
+       # os.environ['WANDB_SILENT']="true"
+    1: os.environ['WANDB_START_METHOD']="thread"
+       
+    1: import or_gym
+       # reload(or_gym)
+    1: from or_gym.utils import create_env
+    1: from or_gym.envs.supply_chain.inventory_management import InvManagementMasterEnv
+       
+    1: from rllab.policies.gaussian_mlp_policy import GaussianMLPPolicy
+       
+       # Baseline
+    1: from sandbox.cpo.baselines.gaussian_mlp_baseline import GaussianMLPBaseline
+       # Envnt
+       # from sandbox.cpo.envs.mujoco.gather.point_gather_env import PointGatherEnv
+       # Poltimization
+    1: from sandbox.cpo.algos.safe.cpo import CPO
+    1: from sandbox.cpo.algos.safe.trpo_safe import TRPO
+    1: from sandbox.cpo.optimizers.conjugate_gradient_optimizer import ConjugateGradientOptimizer
+    1: from sandbox.cpo.safety_constraints.base import SafetyConstraint
+    1: import lasagne.nonlinearities as NL
+    1: import neptune.new as neptune
+       
+    2: run = neptune.init(
+    1:     project="radu.burtea/CPOInvMgmt",
+    1:     api_token="eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLm5lcHR1bmUuYWkiLCJhcGlfdXJsIjoiaHR0cHM6Ly9hcHAubmVwdHVuZS5haSIsImFwaV9rZXkiOiIxYTEyNzhlOC1hZDVlLTQzZWQtOTYxZC1iMTNkNTgyMTg0Y2UifQ==",
+       )  # your credentials
+       
+    1: params = {
+    1:     "network_size": (64,32),
+    1:     "activation": "ReLU",
+    1:     "max_path_length": 20,
+    1:     "n_itr": 80,
+    1:     "gae_lambda": 0.95,
+    1:     "discount": 0.99,
+    1:     "algorithm": "TRPO"
+       }
+       
+    1: run['run_parameters'].log(params)
+       
+    1: env = or_gym.make("InvManagement-v0")
+       
+    2: class InvManagmentSafetyConstraint(SafetyConstraint):
+    1:     def __init__(self, max_value=1., **kwargs):
+    1:         super(InvManagmentSafetyConstraint,self).__init__(max_value, **kwargs)
+           
+    1:     def evaluate(self, path):
+               # print('Implemented within package')
+               # print(path)
+ 5000:         return path['rewards']
+       
+    1: def run_task():
+    1:         trpo_stepsize = 0.01
+    1:         trpo_subsample_factor = 0.2
+               
+    1:         env = InvManagementMasterEnv()
+       
+    2:         policy = GaussianMLPPolicy(env,
+    1:                     hidden_sizes=(64,32)
+                        )
+       
+    2:         baseline = GaussianMLPBaseline(
+    1:             env_spec=env,
+    1:             regressor_args={
+    1:                     'hidden_sizes': (64,32),
+    1:                     'hidden_nonlinearity': NL.tanh,
+    1:                     'learn_std':False,
+    1:                     'step_size':trpo_stepsize,
+    1:                     'optimizer':ConjugateGradientOptimizer(subsample_factor=trpo_subsample_factor)
+                           }
+               )
+       
+    2:         safety_baseline = GaussianMLPBaseline(
+    1:             env_spec=env,
+    1:             regressor_args={
+    1:                     'hidden_sizes': (64,32),
+    1:                     'hidden_nonlinearity': NL.tanh,
+    1:                     'learn_std':False,
+    1:                     'step_size':trpo_stepsize,
+    1:                     'optimizer':ConjugateGradientOptimizer(subsample_factor=trpo_subsample_factor)
+                           },
+    1:             target_key='safety_returns',
+                   )
+       
+    1:         safety_constraint = InvManagmentSafetyConstraint(max_value=0.1, baseline=safety_baseline)
+       
+       
+       
+    2:         algo = TRPO(
+    1:             env=env,
+    1:             policy=policy,
+    1:             baseline=baseline,
+    1:             safety_constraint=safety_constraint,
+    1:             safety_gae_lambda=1,
+    1:             batch_size=50000,
+    1:             max_path_length=20,
+    1:             n_itr=2,
+    1:             gae_lambda=0.95,
+    1:             discount=0.995,
+    1:             step_size=trpo_stepsize,
+    1:             optimizer_args={'subsample_factor':trpo_subsample_factor},
+    1:             neptune_instance = run
+                   # plot=True,
+               )
+       
+    1:         algo.train()
+       
+       
+    1: run_task()
+       # # run_experiment_lite(
+       # #     run_task,
+       # #     n_parallel=1,
+       # #     snapshot_mode="last",
+       # #     exp_prefix='CPO-InvManagement',
+       # #     seed=1,
+       # #     #plot=True
+       # # )

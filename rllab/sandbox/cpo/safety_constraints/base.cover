@@ -1,0 +1,25 @@
+    1: from rllab.core.parameterized import Parameterized
+    1: from rllab.core.serializable import Serializable
+    1: import rllab.misc.logger as logger
+       
+       
+    2: class SafetyConstraint(object):
+       
+    1:     def __init__(self, max_value=1., baseline=None, **kwargs):
+    1:         self.max_value = max_value
+    1:         self.has_baseline = baseline is not None
+    1:         if self.has_baseline:
+    1:             self.baseline = baseline
+       
+    1:     def evaluate(self, paths):
+               raise NotImplementedError
+       
+    1:     def fit(self, paths):
+    2:         if self.has_baseline:
+    2:             logger.log("fitting safety baseline using target_key=" + self.baseline._target_key + "...")
+    2:             self.baseline.fit(paths)
+    2:             logger.log("fitted")
+       
+    1:     def get_safety_step(self):
+    1:         return self.max_value
+       

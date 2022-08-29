@@ -1,0 +1,33 @@
+    1: from sandbox.cpo.algos.safe.policy_gradient_safe import PolicyGradientSafe
+    1: from sandbox.cpo.optimizers.conjugate_constraint_optimizer import ConjugateConstraintOptimizer
+    1: from sandbox.cpo.optimizers.conjugate_gradient_optimizer import ConjugateGradientOptimizer
+    1: from rllab.core.serializable import Serializable
+    1: from sandbox.cpo.safety_constraints.trivial import TrivialSafetyConstraint
+       
+       
+    2: class TRPO(PolicyGradientSafe, Serializable):
+    1:     """
+           Trust Region Policy Optimization
+           """
+       
+    1:     def __init__(
+                   self,
+                   neptune_instance,
+                   optimizer=None,
+                   optimizer_args=None,
+                   safety_constrained_optimizer=True,
+                   safety_constraint=None,
+                   **kwargs):
+    1:         Serializable.quick_init(self, locals())
+    1:         if optimizer is None:
+    1:             if optimizer_args is None:
+                       optimizer_args = dict()
+    1:             if safety_constraint is not None and safety_constrained_optimizer:
+    1:                 optimizer = ConjugateConstraintOptimizer(**optimizer_args)
+                   else:
+                       optimizer = ConjugateGradientOptimizer(**optimizer_args)
+    3:         super(TRPO, self).__init__(optimizer=optimizer, 
+    1:                                    safety_constrained_optimizer=safety_constrained_optimizer,
+    1:                                    safety_constraint=safety_constraint,
+    1:                                    neptune_instance=neptune_instance,
+    1:                                    **kwargs)

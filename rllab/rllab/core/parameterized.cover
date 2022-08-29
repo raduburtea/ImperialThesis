@@ -1,0 +1,85 @@
+    1: from contextlib import contextmanager
+       
+    1: from rllab.core.serializable import Serializable
+    1: from rllab.misc.tensor_utils import flatten_tensors, unflatten_tensors
+       
+    1: load_params = True
+       
+    1: @contextmanager
+    1: def suppress_params_loading():
+           global load_params
+           load_params = False
+           yield
+           load_params = True
+       
+    2: class Parameterized(Serializable):
+       
+    1:     def __init__(self):
+    7:         self._cached_params = {}
+    7:         self._cached_param_dtypes = {}
+    7:         self._cached_param_shapes = {}
+       
+    1:     def get_params_internal(self, **tags):
+               """
+               Internal method to be implemented which does not perform caching
+               """
+               raise NotImplementedError
+       
+    1:     def get_params(self, **tags):  # adds the list to the _cached_params dict under the tuple key (one)
+               """
+               Get the list of parameters, filtered by the provided tags.
+               Some common tags include 'regularizable' and 'trainable'
+               """
+   64:         tag_tuple = tuple(sorted(list(tags.items()), key=lambda x: x[0]))
+   36:         if tag_tuple not in self._cached_params:
+    4:             self._cached_params[tag_tuple] = self.get_params_internal(**tags)
+   36:         return self._cached_params[tag_tuple]
+       
+    1:     def get_param_dtypes(self, **tags):
+   18:         tag_tuple = tuple(sorted(list(tags.items()), key=lambda x: x[0]))
+   10:         if tag_tuple not in self._cached_param_dtypes:
+    4:             self._cached_param_dtypes[tag_tuple] = \
+   64:                 [param.get_value(borrow=True).dtype
+   30:                  for param in self.get_params(**tags)]
+   10:         return self._cached_param_dtypes[tag_tuple]
+       
+    1:     def get_param_shapes(self, **tags):
+  202:         tag_tuple = tuple(sorted(list(tags.items()), key=lambda x: x[0]))
+  102:         if tag_tuple not in self._cached_param_shapes:
+    4:             self._cached_param_shapes[tag_tuple] = \
+   64:                 [param.get_value(borrow=True).shape
+   30:                  for param in self.get_params(**tags)]
+  102:         return self._cached_param_shapes[tag_tuple]
+       
+    1:     def get_param_values(self, **tags):
+   24:         return flatten_tensors(
+  196:             [param.get_value(borrow=True)
+   92:              for param in self.get_params(**tags)]
+               )
+       
+    1:     def set_param_values(self, flattened_params, **tags):
+   10:         debug = tags.pop("debug", False)
+   20:         param_values = unflatten_tensors(
+   10:             flattened_params, self.get_param_shapes(**tags))
+   86:         for param, dtype, value in zip(
+   10:                 self.get_params(**tags),
+   10:                 self.get_param_dtypes(**tags),
+   10:                 param_values):
+   66:             param.set_value(value.astype(dtype))
+   66:             if debug:
+                       print("setting value of %s" % param.name)
+       
+    1:     def flat_to_params(self, flattened_params, **tags):
+   92:         return unflatten_tensors(flattened_params, self.get_param_shapes(**tags))
+       
+    1:     def __getstate__(self):
+               d = Serializable.__getstate__(self)
+               d["params"] = self.get_param_values()
+               return d
+       
+    1:     def __setstate__(self, d):
+               Serializable.__setstate__(self, d)
+               global load_params
+               if load_params:
+                   self.set_param_values(d["params"])
+       
