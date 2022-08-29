@@ -54,12 +54,6 @@ if params['use_neptune']:
     run['params'].log(params)
 else:
     run = None
-# run = neptune.init(
-# project="radu.burtea/ProdSimulation",
-# api_token="eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLm5lcHR1bmUuYWkiLCJhcGlfdXJsIjoiaHR0cHM6Ly9hcHAubmVwdHVuZS5haSIsImFwaV9rZXkiOiIxYTEyNzhlOC1hZDVlLTQzZWQtOTYxZC1iMTNkNTgyMTg0Y2UifQ==",
-# ) 
-
-# run['params'].log(params)
 
 #Flag is needed to detach the tensor and convert it to numpy is algorithm is not CPO or TRPO
 env = InvManagementMasterEnv(None, max_path_length = params['path_len'], inventory = params['inventory'], capacity = params['capacity'],  \
