@@ -1,0 +1,93 @@
+    1: from gym.envs.registration import register
+       
+       # Knapsack Environments
+    2: register(id='Knapsack-v0',
+    1:     entry_point='or_gym.envs.classic_or.knapsack:KnapsackEnv'
+       )
+       
+    2: register(id='Knapsack-v1',
+    1:         entry_point='or_gym.envs.classic_or.knapsack:BinaryKnapsackEnv'
+       )
+       
+    2: register(id='Knapsack-v2',
+    1:         entry_point='or_gym.envs.classic_or.knapsack:BoundedKnapsackEnv'
+       )
+       
+    2: register(id='Knapsack-v3',
+    1:         entry_point='or_gym.envs.classic_or.knapsack:OnlineKnapsackEnv'
+       )
+       
+       # Bin Packing Environments
+    2: register(id='BinPacking-v0',
+    1:         entry_point='or_gym.envs.classic_or.binpacking:BinPackingEnv'
+       )
+       
+    2: register(id='BinPacking-v1',
+    1:         entry_point='or_gym.envs.classic_or.binpacking:BinPackingLW1'
+       )
+       
+    2: register(id='BinPacking-v2',
+    1:         entry_point='or_gym.envs.classic_or.binpacking:BinPackingPP0'
+       )
+       
+    2: register(id='BinPacking-v3',
+    1:         entry_point='or_gym.envs.classic_or.binpacking:BinPackingPP1'
+       )
+       
+    2: register(id='BinPacking-v4',
+    1:         entry_point='or_gym.envs.classic_or.binpacking:BinPackingBW0'
+       )
+       
+    2: register(id='BinPacking-v5',
+    1:         entry_point='or_gym.envs.classic_or.binpacking:BinPackingBW1'
+       )
+       
+       # Newsvendor Envs
+    2: register(id='Newsvendor-v0',
+    1:         entry_point='or_gym.envs.classic_or.newsvendor:NewsvendorEnv'
+       )
+       
+       # Virtual Machine Packing Envs
+    2: register(id='VMPacking-v0',
+    1:         entry_point='or_gym.envs.classic_or.vmpacking:VMPackingEnv'
+       )
+       
+    2: register(id='VMPacking-v1',
+    1:         entry_point='or_gym.envs.classic_or.vmpacking:TempVMPackingEnv'
+       )
+       
+       # Vehicle Routing Envs
+    2: register(id='VehicleRouting-v0',
+    1:         entry_point='or_gym.envs.classic_or.vehicle_routing:VehicleRoutingEnv'
+       )
+       
+       # TSP
+    2: register(id='TSP-v0',
+    1:         entry_point='or_gym.envs.classic_or.tsp:TSPEnv'
+       )
+       
+    2: register(id='TSP-v1',
+    1:         entry_point='or_gym.envs.classic_or.tsp:TSPDistCost'
+       )
+       
+       # Inventory Management Envs
+    2: register(id='InvManagement-v0',
+    1:         entry_point='or_gym.envs.supply_chain.inventory_management:InvManagementBacklogEnv'
+       )
+       
+    2: register(id='InvManagement-v1',
+    1:         entry_point='or_gym.envs.supply_chain.inventory_management:InvManagementLostSalesEnv'
+       )
+       
+    2: register(id='NetworkManagement-v0',
+    1:         entry_point='or_gym.envs.supply_chain.network_management:NetInvMgmtBacklogEnv'
+       )
+       
+    2: register(id='NetworkManagement-v1',
+    1:         entry_point='or_gym.envs.supply_chain.network_management:NetInvMgmtLostSalesEnv'
+       )
+       
+       # Asset Allocation Envs
+    2: register(id='PortfolioOpt-v0',
+    1:         entry_point='or_gym.envs.finance.portfolio_opt:PortfolioOptEnv'
+       )

@@ -1,0 +1,6 @@
+    1: from or_gym.envs.classic_or.knapsack import *
+    1: from or_gym.envs.classic_or.binpacking import *
+    1: from or_gym.envs.classic_or.vmpacking import *
+    1: from or_gym.envs.classic_or.tsp import *
+    1: from or_gym.envs.classic_or.vehicle_routing import VehicleRoutingEnv
+    1: from or_gym.envs.classic_or.newsvendor import NewsvendorEnv

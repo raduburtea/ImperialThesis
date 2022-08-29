@@ -1,0 +1,12 @@
+    1: VERSION='0.4.0'
+       
+    2: ENV_LIST = ['Knapsack-v0', 'Knapsack-v1', 'Knapsack-v2', 'Knapsack-v3',
+    1:             'BinPacking-v0', 'BinPacking-v1', 'BinPacking-v2',
+    1:             'BinPacking-v3', 'BinPacking-v4', 'BinPacking-v5',
+    1:             'VMPacking-v0',
+    1:             'InvManagement-v0', 'InvManagement-v1',
+    1:             'NetworkManagement-v0', 'NetworkManagement-v1',
+    1:             'PortfolioOpt-v0',
+    1:             'VehicleRouting-v0', 
+    1:             'Newsvendor-v0',
+    1:             'TSP-v0', 'TSP-v1']
