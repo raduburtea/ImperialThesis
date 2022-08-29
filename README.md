@@ -2,7 +2,7 @@
 
 This repository contains the code used to produce the results in the "Constrained Reinforcement Learning for Process Optimization" project.
 The OMLT folder contains a slightly modified OMLT package, models_paper contains the implementation of the 
-OMLT-DDPG, SAFE, RCPO and DDPG algorithms. The code found in the production_run.py file implements the SAFE algorithm, 
+OMLT-DDPG, SAFE, RCPO and DDPG algorithms and the rllab folder the code for the TRPO and CPO experiments. The code found in the production_run.py file implements the SAFE algorithm, 
 as well as the framework for running the production runs for the other algorithms.
 Some sample trained models are included in the following folders: 
 - OMLT-DPPG: models_paper/models-OMLT 
