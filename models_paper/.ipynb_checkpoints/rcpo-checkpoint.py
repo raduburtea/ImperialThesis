@@ -20,13 +20,13 @@ class Mish(nn.Module):
     def forward(self, input): return mish(input)
 
 params = {
-        "lagrangian_lr": 1e-5,
+        "lagrangian_lr": 5e-5,
         "n_itr": 4000,
-        "max_path_len":30,
+        "max_path_len":15,
         "discount": 0.9,
-        'seed': 45, 
-        "lr_actor": 1e-4,
-        "lr_critic": 1e-3,
+        'seed': 629, 
+        "lr_actor": 0.0001,
+        "lr_critic": 0.001,
         'inventory': [80, 80, 120],
         'capacity': [80, 75, 65],
         'max_grad_norm': 0.2,
@@ -36,6 +36,10 @@ params = {
 
 
 make_deterministic(params['seed'])
+
+#If the GPU is outdated but CUDA still shows as switch to CPU by uncommenting the following line
+device = torch.device("cpu")
+# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # helper function to convert numpy arrays to tensors
 def t(x, device):
@@ -92,7 +96,7 @@ def discounted_penalized_rewards(rewards, penalties, lagrangian, dones, gamma):
     
     return discounted[::-1]
 
-def process_memory(memory, lagrangian, device, gamma=0.99):
+def process_memory(memory, lagrangian, device, gamma=0.99, discount_rewards=True):
     """Process an entire episode by adding the penalized discounted rewards and transforming each
     variable in memory into a torch tensor"""
     actions = []
@@ -111,8 +115,11 @@ def process_memory(memory, lagrangian, device, gamma=0.99):
         dones.append(done)
     
     #Obtain disocunted reward for each step in the path 
-    rewards = discounted_penalized_rewards(rewards, penalties, lagrangian, dones, gamma)
-
+    if discount_rewards:
+        if False and dones[-1] == 0:
+            rewards = discounted_penalized_rewards(rewards + [last_value], penalties, lagrangian, dones + [0], gamma)[:-1]
+        else:
+            rewards = discounted_penalized_rewards(rewards, penalties, lagrangian, dones, gamma)
 
     actions = torch.cat(actions).reshape(params['max_path_len'],3).to(device)
     states = torch.tensor(states).to(device)
@@ -141,18 +148,17 @@ class A2CLearner():
         self.lagrangian = 0
         self.lr_lagrangian = lr_lagrangian
     
-    def learn(self, memory, device):
+    def learn(self, memory, device, discount_rewards=True):
         """Optimize actor and critic"""
-        actions, rewards, states, next_states, penalties, dones = process_memory(memory, self.lagrangian, device, self.gamma)
+        actions, rewards, states, next_states, penalties, dones = process_memory(memory, self.lagrangian, device, self.gamma, discount_rewards=True)
 
         #Compute td target
-        td_target = rewards + self.gamma*critic(next_states.float().to(device))*(1 - dones.int())
+        td_target = rewards
 
-        #Compute advantage of being in a certain state
         value = critic(states.float().to(device))
         advantage = td_target - value
 
-        # Get normal distribution outputted by the actor
+        # actor
         norm_dists = self.actor(states.float())
         # Compute the log of the probability density function and entropy of the distribution 
         logs_probs = norm_dists.log_prob(actions)
@@ -167,7 +173,6 @@ class A2CLearner():
         
         #Clip gradients of the actor
         clip_grad_norm_(self.actor_optim, self.max_grad_norm)
-        
         if neptune_run:
             neptune_run["gradients/actor"].log(
                                  torch.cat([p.grad.view(-1) for p in self.actor.parameters()]) )
@@ -176,7 +181,7 @@ class A2CLearner():
         #Perform optimization step for the actor
         self.actor_optim.step()
         
-        #Update the value of the lagrangian
+        #lagrangian
         self.lagrangian = max(0, self.lagrangian + self.lr_lagrangian*(penalties.mean() - self.alpha))
         
         # Compute loss for the critic and run optimization step
@@ -190,7 +195,7 @@ class A2CLearner():
             neptune_run["parameters/critic"].log(
                                  torch.cat([p.data.view(-1) for p in self.critic.parameters()]) )
         self.critic_optim.step()
-
+        
         if neptune_run:
             neptune_run["penalized reward"].log(rewards.sum())
             neptune_run["losses/log_probs"].log(-logs_probs.mean())
@@ -222,7 +227,7 @@ class Runner():
         if not memory: memory = []
         status_ep = {'Node1/Replenishment order': [], 'Node2/Replenishment order': [], 'Node3/Replenishment order': [],
             'Node1/Inventory constraint': [], 'Node2/Inventory constraint': [], 'Node1/Capacity constraint': [], 'Node2/Capacity constraint': [],
-            'Node3/Capacity constraint': [],  'Node1/Backlogs': [], 'Node2/Backlogs': [], 'Node3/Backlogs': [], 'Node1/LostSales': [], 'Node2/LostSales': [], 'Node3/LostSales': [], 'Node1/Inventory constraint next': [], 'Node2/Inventory constraint next': []}
+            'Node3/Capacity constraint': [],  'Node1/Backlogs': [], 'Node2/Backlogs': [], 'Node3/Backlogs': [], 'Node1/LostSales': [], 'Node2/LostSales': [], 'Node3/LostSales': [], 'Node1/Inventory constraint next': [], 'Node2/Inventory constraint next': [], 'Penalty':[]}
 
         for i in range(max_steps):
 
@@ -275,6 +280,16 @@ state_dim = env.observation_space.shape[0]
 n_actions = 3
 steps_on_memory = params['max_path_len']
 
+
+rewards = []
+
+actor = Actor(state_dim, n_actions, activation=Mish).to(device)
+critic = Critic(state_dim, activation=Mish).to(device)
+
+learner = A2CLearner(actor, critic, lr_lagrangian=params['lagrangian_lr'], gamma=params['discount'], entropy_beta=params['entropy_beta'], \
+                        actor_lr=params['lr_actor'], critic_lr=params['lr_critic'], max_grad_norm=params['max_grad_norm'])
+runner = Runner(env)
+
 if __name__ == '__main__':
 
     if params['use_neptune']:
@@ -288,32 +303,9 @@ if __name__ == '__main__':
     else:
         neptune_run = None 
 
-    rewards = []
 
-    #Had to include this try except block as for GPUs that are not supported by CUDA the anymore the function 
-    #torch.cuda.is_available() would still display as CUDA being available, even though it can not be used and throws errors.
-    #This try except block switches the device automatically to cpu if the GPU is not supported anymore by CUDA.
-    try:
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        actor = Actor(state_dim, n_actions, activation=Mish).to(device)
-        critic = Critic(state_dim, activation=Mish).to(device)
 
-        learner = A2CLearner(actor, critic, lr_lagrangian=params['lagrangian_lr'], gamma=params['discount'], entropy_beta=params['entropy_beta'], \
-                                actor_lr=params['lr_actor'], critic_lr=params['lr_critic'], max_grad_norm=params['max_grad_norm'])
-        runner = Runner(env)
-
-        memory = runner.run(0, steps_on_memory, rewards, device)
-    except:
-        device = torch.device('cpu')
-        actor = Actor(state_dim, n_actions, activation=Mish).to(device)
-        critic = Critic(state_dim, activation=Mish).to(device)
-        learner = A2CLearner(actor, critic, lr_lagrangian=params['lagrangian_lr'], gamma=params['discount'], entropy_beta=params['entropy_beta'], \
-                                actor_lr=params['lr_actor'], critic_lr=params['lr_critic'], max_grad_norm=params['max_grad_norm'])
-        runner = Runner(env)
-
-        memory = runner.run(0, steps_on_memory, rewards, device)
-    
     #Run training for the desired number of episodes
     for i in range(params['n_itr']):
-        memory = runner.run(i, steps_on_memory, rewards, device)
+        memory = runner.run(i, params['max_path_len'], rewards, device)
         learner.learn(memory, device)

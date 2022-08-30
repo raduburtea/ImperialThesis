@@ -13,7 +13,7 @@ from or_gym.envs.supply_chain.inventory_management import InvManagementMasterEnv
 import neptune.new as neptune
 
 from critic import Critic
-from ddpg.omlt_utils import optimise_actor_with_pyomo, make_deterministic
+from models_paper.omlt_utils import optimise_actor_with_pyomo, make_deterministic
 import pickle 
 
 
@@ -22,8 +22,8 @@ algo_name = 'SAFE-30'
 
 #Path to the files constaining the saved models
 #Sample saved models
-critic_file_path = 'ddpg/models-DDPG/critic15-lowerlr.pt'
-actor_file_path = 'ddpg/models-DDPG/actor15-lowerlr.pt'
+critic_file_path = 'models_paper/models-OMLT/criticseed12p30normalnowarmup-qval.pt'
+actor_file_path = 'models_paper/models-OMLT/actorseed12p30normalnowarmup-qval.pt'
 
 if algo_name[:4] == 'RCPO':
     from rcpo import actor
@@ -54,12 +54,6 @@ if params['use_neptune']:
     run['params'].log(params)
 else:
     run = None
-# run = neptune.init(
-# project="radu.burtea/ProdSimulation",
-# api_token="eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLm5lcHR1bmUuYWkiLCJhcGlfdXJsIjoiaHR0cHM6Ly9hcHAubmVwdHVuZS5haSIsImFwaV9rZXkiOiIxYTEyNzhlOC1hZDVlLTQzZWQtOTYxZC1iMTNkNTgyMTg0Y2UifQ==",
-# ) 
-
-# run['params'].log(params)
 
 #Flag is needed to detach the tensor and convert it to numpy is algorithm is not CPO or TRPO
 env = InvManagementMasterEnv(None, max_path_length = params['path_len'], inventory = params['inventory'], capacity = params['capacity'],  \
@@ -128,7 +122,6 @@ for episode in range(episodes):
                 for attempt_no in range(4):
                     try:
                         initial_guess = actor.model(state.to(device)).flatten().detach()
-                        print(initial_guess)
                         actor_action = optimise_actor_with_pyomo(actor, critic, state, initial_guess, device, node_status,  BATCH_SIZE = 1, mode='test')[0]
                         break
                     except:

@@ -1,0 +1,35 @@
+{"obj": {"type": "AssignString", "path": ["sys", "name"], "value": "Untitled"}, "version": 1}
+{"obj": {"type": "AssignString", "path": ["sys", "description"], "value": ""}, "version": 2}
+{"obj": {"type": "AssignString", "path": ["sys", "hostname"], "value": "line05.doc.ic.ac.uk"}, "version": 3}
+{"obj": {"type": "AssignBool", "path": ["sys", "failed"], "value": false}, "version": 4}
+{"obj": {"type": "ClearStringLog", "path": ["monitoring", "stdout"]}, "version": 5}
+{"obj": {"type": "ClearStringLog", "path": ["monitoring", "stderr"]}, "version": 6}
+{"obj": {"type": "AssignString", "path": ["source_code", "entrypoint"], "value": "rcpo.py"}, "version": 7}
+{"obj": {"type": "UploadFileSet", "path": ["source_code", "files"], "file_globs": ["/homes/rb1321/Desktop/github/ImperialThesis/models_paper/rcpo.py"], "reset": "False"}, "version": 8}
+{"obj": {"type": "LogStrings", "path": ["monitoring", "stderr"], "values": [{"value": "Info (NVML): NVML Shared Library Not Found. GPU usage metrics may not be reported. For more information, see https://docs.neptune.ai/you-should-know/what-can-you-log-and-display#hardware-consumption\n", "step": null, "ts": 1661856205.4182851}]}, "version": 9}
+{"obj": {"type": "ConfigFloatSeries", "path": ["monitoring", "cpu"], "min": 0.0, "max": 100.0, "unit": "%"}, "version": 10}
+{"obj": {"type": "ClearFloatLog", "path": ["monitoring", "cpu"]}, "version": 11}
+{"obj": {"type": "ConfigFloatSeries", "path": ["monitoring", "memory"], "min": 0.0, "max": 15.510150909423828, "unit": "GB"}, "version": 12}
+{"obj": {"type": "ClearFloatLog", "path": ["monitoring", "memory"]}, "version": 13}
+{"obj": {"type": "LogFloats", "path": ["monitoring", "cpu"], "values": [{"value": 5.5, "step": null, "ts": 1661856205.433305}]}, "version": 14}
+{"obj": {"type": "LogFloats", "path": ["monitoring", "memory"], "values": [{"value": 2.224720001220703, "step": null, "ts": 1661856205.433305}]}, "version": 15}
+{"obj": {"type": "LogFloats", "path": ["actor_lr"], "values": [{"value": 0.0001, "step": null, "ts": 1661856205.4414947}]}, "version": 16}
+{"obj": {"type": "LogFloats", "path": ["lr_critic"], "values": [{"value": 0.001, "step": null, "ts": 1661856205.444017}]}, "version": 17}
+{"obj": {"type": "LogFloats", "path": ["lagrangian_lr"], "values": [{"value": 5e-05, "step": null, "ts": 1661856205.4465551}]}, "version": 18}
+{"obj": {"type": "LogStrings", "path": ["params"], "values": [{"value": "{'seed': 629, 'lagrangian_lr': 5e-05, 'lr_actor': 0.0001, 'lr_critic': 0.001, 'max_path_len': 15, 'network_size': (128, 64), 'n_itr': 100, 'gae_lambda': 0.95, 'discount': 0.995, 'algorithm': 'CPO', 'max_value': 2, 'type of constraint': 'hard', 'Algo': 'RCPO', 'inventory': [80, 80, 120], 'capacity': [80, 75, 65]}", "step": null, "ts": 1661856205.4490652}]}, "version": 19}
+{"obj": {"type": "LogStrings", "path": ["monitoring", "traceback"], "values": [{"value": "An uncaught exception occurred while run was active on worker line05.doc.ic.ac.uk.", "step": null, "ts": 1661856205.4554343}, {"value": "Marking run as failed", "step": null, "ts": 1661856205.4554343}, {"value": "Traceback:", "step": null, "ts": 1661856205.4554343}, {"value": "  File \"models_paper/rcpo.py\", line 338, in <module>\n    memory = runner.run(i, steps_on_memory, rewards)\n", "step": null, "ts": 1661856205.4554343}, {"value": "  File \"models_paper/rcpo.py\", line 247, in run\n    status_ep[status].append(node_status[status])\n", "step": null, "ts": 1661856205.4554343}, {"value": "'Penalty'", "step": null, "ts": 1661856205.4554343}]}, "version": 20}
+{"obj": {"type": "AssignBool", "path": ["sys", "failed"], "value": true}, "version": 21}
+{"obj": {"type": "LogStrings", "path": ["monitoring", "stderr"], "values": [{"value": "Traceback (most recent call last):\n", "step": null, "ts": 1661856205.4600222}]}, "version": 22}
+{"obj": {"type": "LogStrings", "path": ["monitoring", "stderr"], "values": [{"value": "  File \"models_paper/rcpo.py\", line 338, in <module>\n", "step": null, "ts": 1661856205.462339}]}, "version": 23}
+{"obj": {"type": "LogStrings", "path": ["monitoring", "stderr"], "values": [{"value": "    ", "step": null, "ts": 1661856205.4656582}]}, "version": 24}
+{"obj": {"type": "LogStrings", "path": ["monitoring", "stderr"], "values": [{"value": "memory = runner.run(i, steps_on_memory, rewards)", "step": null, "ts": 1661856205.4679213}]}, "version": 25}
+{"obj": {"type": "LogStrings", "path": ["monitoring", "stderr"], "values": [{"value": "\n", "step": null, "ts": 1661856205.4702873}]}, "version": 26}
+{"obj": {"type": "LogStrings", "path": ["monitoring", "stderr"], "values": [{"value": "  File \"models_paper/rcpo.py\", line 247, in run\n", "step": null, "ts": 1661856205.4725845}]}, "version": 27}
+{"obj": {"type": "LogStrings", "path": ["monitoring", "stderr"], "values": [{"value": "    ", "step": null, "ts": 1661856205.476115}]}, "version": 28}
+{"obj": {"type": "LogStrings", "path": ["monitoring", "stderr"], "values": [{"value": "status_ep[status].append(node_status[status])", "step": null, "ts": 1661856205.47867}]}, "version": 29}
+{"obj": {"type": "LogStrings", "path": ["monitoring", "stderr"], "values": [{"value": "\n", "step": null, "ts": 1661856205.4810638}]}, "version": 30}
+{"obj": {"type": "LogStrings", "path": ["monitoring", "stderr"], "values": [{"value": "KeyError", "step": null, "ts": 1661856205.4836373}]}, "version": 31}
+{"obj": {"type": "LogStrings", "path": ["monitoring", "stderr"], "values": [{"value": ": ", "step": null, "ts": 1661856205.4860916}]}, "version": 32}
+{"obj": {"type": "LogStrings", "path": ["monitoring", "stderr"], "values": [{"value": "'Penalty'", "step": null, "ts": 1661856205.488509}]}, "version": 33}
+{"obj": {"type": "LogStrings", "path": ["monitoring", "stderr"], "values": [{"value": "\n", "step": null, "ts": 1661856205.4910488}]}, "version": 34}
+{"obj": {"type": "LogStrings", "path": ["monitoring", "stdout"], "values": [{"value": "Shutting down background jobs, please wait a moment...\n", "step": null, "ts": 1661856205.4936101}]}, "version": 35}

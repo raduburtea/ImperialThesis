@@ -47,7 +47,7 @@ def run_task(*_):
     # Please note that different environments with different action spaces may require different
     # policies. For example with a Box action space, a GaussianMLPPolicy works, but for a Discrete
     # action space may need to use a CategoricalMLPPolicy (see the trpo_gym_cartpole.py example)
-    env = InvManagementMasterEnv(neptune_instance, max_path_length = params['max_path_len'], inventory = params['Inv'], capacity=params['Capacity'])
+    env = InvManagementMasterEnv(neptune_instance, max_path_length = params['max_path_len'], inventory = params['Inv'], capacity=params['Capacity'], flag = False)
 
     policy = GaussianMLPPolicy(
         env_spec=env,

@@ -23,6 +23,9 @@ from or_gym.envs.supply_chain.inventory_management import InvManagementMasterEnv
 import neptune
 
 
+#If you want to run the OMLT-DDPG variant without warm-up pass 0 to the warm_up_cutoff variable
+# Otherwise pass any other integer that would determine the number of episodes used for warm-up, 30 have been used initially
+#In order to run the DDPG algorithm pass the name DDPG to the ALGO variable
 params = {
         'save_name': 'seed28p15normalnowarmup-qval',
         "max_path_length": 15,
@@ -31,7 +34,7 @@ params = {
         "ALGO": 'OMLT',
         'inventory': [100, 100, 200],
         'capacity': [100, 90, 80],
-        "warm-up period":0,
+        "warm_up_cutoff":0,
         "n_itr": 150,
         "discount": 0.995,
         "BATCH_NORMAL": 512,
@@ -73,7 +76,7 @@ critic_layers = (state_dim + action_dim, hidden_layer_critic, 32, 1)
 actor = Actor(actor_layers, lr = params['actor_lr'], max_force=1, device=device)
 critic = Critic(critic_layers, lr = params['lr_critic'], device=device)
 
-warm_up_cutoff = 0
+warm_up_cutoff = params['warm_up_cutoff']
 memory = ReplayMemory(60000)
 
 run = None
@@ -114,6 +117,8 @@ def optimise_models(actor, critic, memory, episode, node_status, critic_params, 
                 act, loss_actor = optimise_actor_with_pyomo(actor, critic, state_batch, action_batch, device, \
                      node_batch, BATCH_SIZE = params['BATCH_OMLT'], solver_name = params['solver'])
                 actor.optim = optim.Adam(actor.model.parameters(), lr = params["LR_OMLT"])
+            except KeyboardInterrupt:
+                raise Exception()
             except:
                 print("Pyomo solver threw an unexpected error")
 
@@ -217,9 +222,6 @@ def start_simulation(run, params, returns_all_eps, penalties_all_eps, warm_up_cu
                     print("duration  ", episode_durations[-1])
                     print("rewards ", np.sum(rewards))
                     print("Penalties ", np.mean(penalties))
-
-                    torch.save(actor.model.state_dict(), 'ddpg/models-' + params['ALGO'] + '/actor' + params['save_name'] + '.pt')
-                    torch.save(critic.model.state_dict(), 'ddpg/models-' + params['ALGO'] + '/critic' + params['save_name'] + '.pt')
                 
                 returns_eps.append(np.sum(rewards))
                 penalties_eps.append(np.mean(penalties))
