@@ -20,6 +20,9 @@ cd into the ImperialThesis (```cd ImperialThesis```) directory and run the follo
 ```
 pip install -r requirements.txt
 ```
+You also need to install the Lasagne package separately as the version required to run with Theano is not available on pip anymore. For this please run the following: ``` pip install --upgrade https://github.com/Lasagne/Lasagne/archive/master.zip ```
+
+Ipopt also has to be installed with homwbrew, by running the following command: ```brew install ipopt```
 
 To run each of the experiments included in this repository please cd in the ImperialThesis directory and run the followig commands:
 - OMLT-DDPG: ```python models_paper/omltddpg.py```
